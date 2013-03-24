@@ -65,7 +65,7 @@ class Compiler(_Compiler):
         self.buf.append('{% endfor %}')
 
     def attributes(self,attrs):
-        return "{{%s(%s)}}"%(ATTRS_FUNC,attrs)
+        return "{{%s(%s)|safe}}"%(ATTRS_FUNC,attrs)
 
 
 class PyJadeExtension(Extension):
