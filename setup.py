@@ -14,4 +14,5 @@ setup(name='pyjade',
       entry_points = {
           'console_scripts' : ['pyjade = pyjade.convert:convert_file',]
       }
+      zip_safe=False
     )
