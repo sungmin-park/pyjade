@@ -13,6 +13,6 @@ setup(name='pyjade',
       license = 'MIT',
       entry_points = {
           'console_scripts' : ['pyjade = pyjade.convert:convert_file',]
-      }
+      },
       zip_safe=False
     )
