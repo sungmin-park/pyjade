@@ -1,5 +1,7 @@
-from utils import odict
+from __future__ import absolute_import
+from .utils import odict
 import types
+import six
 
 try:
     from collections import Mapping as MappingType
@@ -29,12 +31,13 @@ def escape(s):
     """
     if hasattr(s, '__html__'):
         return s.__html__()
-
-    if isinstance(s, str):
-        s = unicode(str(s), 'utf8')
+    if isinstance(s, six.binary_type):
+        s = six.text_type(str(s), 'utf8')
+    elif isinstance(s, six.text_type):
+        s = s
     else:
         s = str(s)
-    
+
     return (s
         .replace('&', '&amp;')
         .replace('>', '&gt;')
@@ -43,18 +46,20 @@ def escape(s):
         .replace('"', '&#34;')
     )
 
-def attrs (attrs=[],terse=False):
+def attrs (attrs=[],terse=False, undefined=None):
     buf = []
     if bool(attrs):
-        buf.append('')
+        buf.append(u'')
         for k,v in attrs:
+            if undefined is not None and isinstance(v, undefined):
+                continue
             if v!=None and (v!=False or type(v)!=bool):
                 if k=='class' and isinstance(v, (list, tuple)):
-                    v = ' '.join(map(str,flatten(v)))
+                    v = u' '.join(map(str,flatten(v)))
                 t = v==True and type(v)==bool
                 if t and not terse: v=k
-                buf.append('%s'%k if terse and t else '%s="%s"'%(k,v))
-    return ' '.join(buf)
+                buf.append(u'%s'%k if terse and t else u'%s="%s"'%(k,escape(v)))
+    return u' '.join(buf)
 
 def is_mapping(value):
     return isinstance(value, MappingType)
@@ -86,7 +91,7 @@ def iteration(obj, num_keys):
     head = next(iter(obj), None)
     if head:
         try:
-            if not isinstance(head, types.StringTypes):
+            if not isinstance(head, six.string_types):
                 card = len(head)
                 if num_keys == card:
                     return obj

@@ -3,14 +3,14 @@
 import contextlib
 
 import pyjade
-from pyjade.runtime import is_mapping, iteration
-
+from pyjade.runtime import is_mapping, iteration, escape
+import six
 
 def process_param(key, value, terse=False):
     if terse:
         if (key == value) or (value is True):
             return key
-    if isinstance(value, basestring):
+    if isinstance(value, six.binary_type):
         value = value.decode('utf8')
     return '''%s="%s"''' % (key, value)
 
@@ -38,19 +38,19 @@ class HTMLCompiler(pyjade.compiler.Compiler):
     mixins = dict()
     useRuntime = True
     def _do_eval(self, value):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = value.encode('utf-8')
         try:
             value = eval(value, self.global_context, self.local_context)
         except:
-            return ''
+            return None
         return value
 
     def _get_value(self, attr):
         value = attr['val']
         if attr['static']:
             return attr['val']
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             return self._do_eval(value)
         else:
             return attr['name']
@@ -106,7 +106,7 @@ class HTMLCompiler(pyjade.compiler.Compiler):
         if code.block:
             self.visit(code.block)
         if not code.buffer and not code.block:
-            exec code.val.lstrip() in self.global_context, self.local_context
+            six.exec_(code.val.lstrip(), self.global_context, self.local_context)
 
     def visitEach(self, each):
         obj = iteration(self._do_eval(each.obj), len(each.keys))
@@ -137,9 +137,9 @@ class HTMLCompiler(pyjade.compiler.Compiler):
                 value = self._get_value(attr)
 
                 if value not in (None,False):
-                    params.append((attr['name'], value))
+                    params.append((attr['name'], escape(value)))
         if classes:
-            classes = [unicode(c) for c in classes]
+            classes = [six.text_type(c) for c in classes]
             params.append(('class', " ".join(classes)))
         if params:
             self.buf.append(" "+" ".join([process_param(k, v, self.terse) for (k,v) in params]))

@@ -1,5 +1,6 @@
 import re
 import os
+import six
 
 class Compiler(object):
     RE_INTERPOLATE = re.compile(r'(\\)?([#!]){(.*?)}')
@@ -71,16 +72,21 @@ class Compiler(object):
         self.terse = False
         self.xml = False
         self.mixing = 0
+        self.variable_start_string = options.get("variable_start_string", "{{")
+        self.variable_end_string = options.get("variable_end_string", "}}")
         if 'doctype' in self.options: self.setDoctype(options['doctype'])
 
     def compile_top(self):
         return ''
-    
+
     def compile(self):
         self.buf = [self.compile_top()]
         self.lastBufferedIdx = -1
         self.visit(self.node)
-        return unicode(u''.join(self.buf))
+        compiled = u''.join(self.buf)
+        if isinstance(compiled, six.binary_type):
+            compiled = six.text_type(compiled, 'utf8')
+        return compiled
 
     def setDoctype(self,name):
         self.doctype = self.doctypes.get(name or 'default','<!DOCTYPE %s>'%name)
@@ -122,9 +128,9 @@ class Compiler(object):
 
     def visitCodeBlock(self,block):
         self.buffer('{%% block %s %%}'%block.name)
-        if block.mode=='prepend': self.buffer('{{super()}}')
+        if block.mode=='prepend': self.buffer('%ssuper()%s' % (self.variable_start_string, self.variable_end_string))
         self.visitBlock(block)
-        if block.mode=='append': self.buffer('{{super()}}')
+        if block.mode=='append': self.buffer('%ssuper()%s' % (self.variable_start_string, self.variable_end_string))
         self.buffer('{% endblock %}')
 
     def visitDoctype(self,doctype=None):
@@ -135,12 +141,12 @@ class Compiler(object):
         self.hasCompiledDoctype = True
 
     def visitMixin(self,mixin):
-        if mixin.block: 
-          self.buffer('{%% macro %s(%s) %%}'%(mixin.name,mixin.args)) 
+        if mixin.block:
+          self.buffer('{%% macro %s(%s) %%}'%(mixin.name,mixin.args))
           self.visitBlock(mixin.block)
           self.buffer('{% endmacro %}')
         else:
-          self.buffer('{{%s(%s)}}'%(mixin.name,mixin.args))
+          self.buffer('%s%s(%s)%s' % (self.variable_start_string, mixin.name, mixin.args, self.variable_end_string))
     def visitTag(self,tag):
         self.indents += 1
         name = tag.name
@@ -193,8 +199,8 @@ class Compiler(object):
         return self.RE_INTERPOLATE.sub(lambda matchobj:repl(matchobj.group(3)),attr)
 
     def interpolate(self,text):
-        return self._interpolate(text,lambda x:'{{%s}}'%x)
- 
+        return self._interpolate(text,lambda x:'%s%s%s' % (self.variable_start_string, x, self.variable_end_string))
+
     def visitText(self,text):
         text = ''.join(text.nodes)
         text = self.interpolate(text)
@@ -246,7 +252,7 @@ class Compiler(object):
 
 
     def visitVar(self,var,escape=False):
-        return ('{{%s%s}}'%(var,'|escape' if escape else ''))
+        return ('%s%s%s%s' % (self.variable_start_string, var, '|escape' if escape else '', self.variable_end_string))
 
     def visitCode(self,code):
         if code.buffer:
@@ -271,7 +277,7 @@ class Compiler(object):
         self.buf.append('{% endfor %}')
 
     def attributes(self,attrs):
-        return "{{__pyjade_attrs(%s)}}"%attrs
+        return "%s__pyjade_attrs(%s)%s" % (self.variable_start_string, attrs, self.variable_end_string)
 
     def visitDynamicAttributes(self,attrs):
         buf,classes,params = [],[],{}
@@ -290,7 +296,7 @@ class Compiler(object):
         buf = ', '.join(buf)
         if self.terse: params['terse'] = 'True'
         if buf: params['attrs'] = '[%s]'%buf
-        param_string = ', '.join(['%s=%s'%(n,v) for n,v in params.iteritems()])
+        param_string = ', '.join(['%s=%s'%(n,v) for n,v in six.iteritems(params)])
         if buf or terse:
             self.buf.append(self.attributes(param_string))
 
@@ -302,7 +308,7 @@ class Compiler(object):
                     self.visitDynamicAttributes(temp_attrs)
                     temp_attrs = []
                 n,v = attr['name'], attr['val']
-                if isinstance(v,basestring):
+                if isinstance(v,six.string_types):
                     if self.useRuntime or attr['static']:
                         self.buf.append(' %s=%s'%(n,v))
                     else:
@@ -314,7 +320,7 @@ class Compiler(object):
                         self.buf.append(' %s="%s"'%(n,n))
             else:
                 temp_attrs.append(attr)
-        
+
         if temp_attrs: self.visitDynamicAttributes(temp_attrs)
 
     @classmethod

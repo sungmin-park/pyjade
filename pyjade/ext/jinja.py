@@ -1,12 +1,18 @@
 from jinja2.ext import Extension
 import os
-from pyjade import Parser, Compiler as _Compiler
-from pyjade.runtime import attrs, iteration
-from jinja2.debug import fake_exc_info
+import pyjade.runtime
+
+from pyjade import Compiler as _Compiler
+from pyjade.runtime import attrs as _attrs, iteration
+from jinja2.runtime import Undefined
 from pyjade.utils import process
 
 ATTRS_FUNC = '__pyjade_attrs'
 ITER_FUNC = '__pyjade_iter'
+
+def attrs(attrs, terse=False):
+    return _attrs(attrs, terse, Undefined)
+
 class Compiler(_Compiler):
 
     def visitCodeBlock(self,block):
@@ -15,18 +21,19 @@ class Compiler(_Compiler):
             caller_name = '__pyjade_caller_%d' % self.mixing
           else:
             caller_name = 'caller'
-          self.buffer('{%% if %s %%}{{ %s() }}{%% endif %%}' % (caller_name, caller_name))
+          self.buffer('{%% if %s %%}%s %s() %s{%% endif %%}' % (caller_name, self.variable_start_string,
+              caller_name, self.variable_end_string))
         else:
           self.buffer('{%% block %s %%}'%block.name)
-          if block.mode=='append': self.buffer('{{super()}}')
+          if block.mode=='append': self.buffer('%ssuper()%s' % (self.variable_start_string, self.variable_end_string))
           self.visitBlock(block)
-          if block.mode=='prepend': self.buffer('{{super()}}')
+          if block.mode=='prepend': self.buffer('%ssuper()%s' % (self.variable_start_string, self.variable_end_string))
           self.buffer('{% endblock %}')
 
     def visitMixin(self,mixin):
         self.mixing += 1
         if not mixin.call:
-          self.buffer('{%% macro %s(%s) %%}'%(mixin.name,mixin.args)) 
+          self.buffer('{%% macro %s(%s) %%}'%(mixin.name,mixin.args))
           self.visitBlock(mixin.block)
           self.buffer('{% endmacro %}')
         elif mixin.block:
@@ -36,7 +43,7 @@ class Compiler(_Compiler):
           self.visitBlock(mixin.block)
           self.buffer('{% endcall %}')
         else:
-          self.buffer('{{%s(%s)}}'%(mixin.name,mixin.args))
+          self.buffer('%s%s(%s)%s' % (self.variable_start_string, mixin.name, mixin.args, self.variable_end_string))
         self.mixing -= 1
 
     def visitAssignment(self,assignment):
@@ -45,7 +52,8 @@ class Compiler(_Compiler):
     def visitCode(self,code):
         if code.buffer:
             val = code.val.lstrip()
-            self.buf.append('{{%s%s}}'%(val,'|escape' if code.escape else ''))
+            self.buf.append('%s%s%s%s' % (self.variable_start_string, val,'|escape' if code.escape else '',
+                self.variable_end_string))
         else:
             self.buf.append('{%% %s %%}'%code.val)
 
@@ -58,14 +66,14 @@ class Compiler(_Compiler):
               codeTag = code.val.strip().split(' ',1)[0]
               if codeTag in self.autocloseCode:
                   self.buf.append('{%% end%s %%}'%codeTag)
- 
+
     def visitEach(self,each):
         self.buf.append("{%% for %s in %s(%s,%d) %%}"%(','.join(each.keys),ITER_FUNC,each.obj,len(each.keys)))
         self.visit(each.block)
         self.buf.append('{% endfor %}')
 
     def attributes(self,attrs):
-        return "{{%s(%s)|safe}}"%(ATTRS_FUNC,attrs)
+        return "%s%s(%s)|safe%s" % (self.variable_start_string, ATTRS_FUNC,attrs, self.variable_end_string)
 
 
 class PyJadeExtension(Extension):
@@ -91,13 +99,18 @@ class PyJadeExtension(Extension):
             pyjade=self,
             # jade_env=JinjaEnvironment(),
         )
+
         # environment.exception_handler = self.exception_handler
         # get_corresponding_lineno
         environment.globals[ATTRS_FUNC] = attrs
         environment.globals[ITER_FUNC] = iteration
+        self.variable_start_string = environment.variable_start_string
+        self.variable_end_string = environment.variable_end_string
+        self.options["variable_start_string"] = environment.variable_start_string
+        self.options["variable_end_string"] = environment.variable_end_string
 
     def preprocess(self, source, name, filename=None):
-        if (not name or 
+        if (not name or
            (name and not os.path.splitext(name)[1] in self.file_extensions)):
             return source
         return process(source,filename=name,compiler=Compiler,**self.options)

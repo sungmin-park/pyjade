@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 import hashlib
 
 from django.template.base import TemplateDoesNotExist
@@ -5,7 +6,7 @@ from django.template.loader import BaseLoader, get_template_from_string, find_te
 import os
 
 from django.conf import settings
-from compiler import Compiler
+from .compiler import Compiler
 from pyjade import Parser
 
 from pyjade.utils import process
@@ -70,7 +71,7 @@ class Loader(BaseLoader):
             if not hasattr(template, 'render'):
                 try:
                     template = get_template_from_string(process(source,filename=template_name,compiler=Compiler), origin, template_name)
-                except TemplateDoesNotExist:
+                except TemplateDoesNotExist, UnboundLocalError:
                     # If compiling the template we found raises TemplateDoesNotExist,
                     # back off to returning he source and display name for the template
                     # we were asked to load. This allows for correct identification (later)
