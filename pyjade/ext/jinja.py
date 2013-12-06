@@ -74,7 +74,7 @@ class Compiler(_Compiler):
         self.buf.append('{% endfor %}')
 
     def attributes(self,attrs):
-        return "%s%s(%s)%s" % (self.variable_start_string, ATTRS_FUNC,attrs, self.variable_end_string)
+        return "%s%s(%s)|safe%s" % (self.variable_start_string, ATTRS_FUNC,attrs, self.variable_end_string)
 
 
 class PyJadeExtension(Extension):
